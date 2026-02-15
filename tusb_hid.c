@@ -69,9 +69,7 @@ void tuh_hid_mount_cb(uint8_t dev_addr, uint8_t instance, uint8_t const *desc_re
         printf("Error: cannot request to receive report\n");
     }
 
-#ifdef PICO_DEFAULT_LED_PIN
     gpio_put(PICO_DEFAULT_LED_PIN, true);
-#endif
 }
 
 // Invoked when device with hid interface is un-mounted
@@ -79,9 +77,7 @@ void tuh_hid_umount_cb(uint8_t dev_addr, uint8_t instance)
 {
     printf("HID device address = %d, instance = %d is unmounted\n", dev_addr, instance);
 
-#ifdef PICO_DEFAULT_LED_PIN
     gpio_put(PICO_DEFAULT_LED_PIN, false);
-#endif
 }
 
 static void process_mouse_report(hid_mouse_report_t const *report)

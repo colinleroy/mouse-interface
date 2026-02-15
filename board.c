@@ -47,26 +47,26 @@ static void __time_critical_func(reset)(bool asserted) {
 
 void __time_critical_func(board)(void) {
 
-    a2pico_init(pio0);
+    a2pico_init();
 
     a2pico_resethandler(&reset);
 
     while (true) {
-        uint32_t pico = a2pico_getaddr(pio0);
+        uint32_t pico = a2pico_getaddr();
         uint32_t addr = pico & 0x0FFF;
         uint32_t io   = pico & 0x0F00;      // IOSTRB or IOSEL
         uint32_t strb = pico & 0x0800;      // IOSTRB
-        uint32_t read = pico & 0x1000;      // R/W
+        uint32_t read = pico & RW_BIT;      // R/W
 
         if (read) {
             if (!io) {  // DEVSEL
-                a2pico_putdata(pio0, PIA6520_read(addr));
+                a2pico_putdata(PIA6520_read(addr));
             } else if (!strb) {  // IOSEL
-                a2pico_putdata(pio0, firmware[addr & 0xFF | offset]);
+                a2pico_putdata(firmware[addr & 0xFF | offset]);
             }
 
         } else {
-            uint32_t data = a2pico_getdata(pio0);
+            uint32_t data = a2pico_getdata();
 
             if (!io) {  // DEVSEL
                 // PIA registers are being written

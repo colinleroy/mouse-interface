@@ -42,10 +42,8 @@ void main(void) {
 
     stdio_init_all();
 
-#ifdef PICO_DEFAULT_LED_PIN
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
-#endif
 
     tusb_init();
 
