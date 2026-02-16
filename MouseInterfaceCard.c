@@ -182,8 +182,9 @@
 #define MOUSE_MODE_VBL_IRQ    (1<<3) // VBL interrupts are active even without "MOUSE_MODE_ENABLED"!
 
 /* VBL Timeouts */
-#define US_60HZ               (1000 * 1000 / 60)
-#define US_50HZ               (1000 * 1000 / 50)
+#define US_60HZ_CYCLES        17030
+#define EU_50HZ_CYCLES        20280
+#define ADJUST_CYCLES         -1       // PIO loop counts from X to 0 inclusive, so remove one
 
 typedef struct
 {
@@ -194,8 +195,7 @@ typedef struct
     uint8_t WritePos;
     uint8_t LastPortB;
 
-    bool    Vbl50HzMode;
-    absolute_time_t LastVblTime;
+    uint16_t InterVblCycles;
 
     uint8_t OperatingMode;
     uint8_t IntState;
@@ -240,9 +240,22 @@ static void clampXY()
         Mouse.Current.Y = Mouse.Clamp.MaxY;
 }
 
+static void __time_critical_func(mouseControllerVblIrq)(void)
+{
+    pio_interrupt_clear(pio0, 0);
+    Mouse.IntState |= STATUS_IRQ_VBL;
+}
+
 static void mouseCommandSet()
 {
     Mouse.OperatingMode = Mouse.Command & 0x0F;
+
+    if ((Mouse.OperatingMode & MOUSE_MODE_VBL_IRQ) == MOUSE_MODE_VBL_IRQ) {
+        a2pico_synchandler(mouseControllerVblIrq, Mouse.InterVblCycles);
+    } else {
+        a2pico_synchandler(NULL, 0);
+    }
+
     DEBUG_PRINT("MOUSE: OPERATING MODE=%02x  %s\n", Mouse.OperatingMode, (Mouse.OperatingMode&1) ? "ENABLED" : "DISABLED");
 }
 
@@ -309,8 +322,6 @@ static void mouseCommandInit()
 {
     Mouse.Clamp.MaxX = Mouse.Clamp.MaxY = 1023;
     Mouse.Clamp.MinX = Mouse.Clamp.MinY = 0;
-
-    Mouse.LastVblTime = get_absolute_time();
 
     mouseCommandHome();
     IRQ_DEASSERT();
@@ -390,7 +401,8 @@ static void mouseCommandClamp()
 
 static void mouseCommandTime()
 {
-    Mouse.Vbl50HzMode = (Mouse.Command & 0x1); // bit 0: 1=50Hz, 0=60Hz
+    // bit 0: 1=50Hz, 0=60Hz
+    Mouse.InterVblCycles = ((Mouse.Command & 0x1) ? EU_50HZ_CYCLES : US_60HZ_CYCLES) + ADJUST_CYCLES;
 }
 
 static void mouseCommand(void)
@@ -584,25 +596,6 @@ void mouseControllerUpdateButton(uint8_t ButtonNr, bool Pressed)
     }
 }
 
-/** Simple VBL IRQ generation. This needs to be improved to be really synchronous to the 6502 VBL. */
-static void mouseControllerVblIrq(void)
-{
-    absolute_time_t Now = get_absolute_time();
-
-    if (absolute_time_diff_us(Mouse.LastVblTime, Now) > (Mouse.Vbl50HzMode ? US_50HZ : US_60HZ))
-    {
-        // remember current time
-        Mouse.LastVblTime = Now;
-
-        // Vertical BLanking interrupt enabled?
-        if ((Mouse.OperatingMode & MOUSE_MODE_VBL_IRQ) == MOUSE_MODE_VBL_IRQ)
-        {
-            // trigger IRQ
-            Mouse.IntState |= STATUS_IRQ_VBL;
-        }
-    }
-}
-
 void mouseControllerRun(void)
 {
     uint8_t PortB = PIA6520_PORTB();
@@ -617,9 +610,6 @@ void mouseControllerRun(void)
     // process read requests
     mouseControllerRead(PortB);
     Mouse.LastPortB = PortB;
-
-    // generate VBL interrupts
-    mouseControllerVblIrq();
 
     // finally, do we need to trigger the AppleIIBus IRQ line?
     if (Mouse.IntState & (STATUS_IRQ_VBL|STATUS_IRQ_MOVEMENT|STATUS_IRQ_BUTTON))
@@ -649,5 +639,6 @@ void __time_critical_func(mouseControllerReset)(void)
 
 void mouseControllerInit(void)
 {
+    Mouse.InterVblCycles = US_60HZ_CYCLES + ADJUST_CYCLES;
     mouseControllerReset();
 }
