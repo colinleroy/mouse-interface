@@ -125,6 +125,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <pico/stdlib.h>
+#include <pico/sync.h>
 #include <a2pico.h>
 
 #if 0
@@ -227,6 +228,7 @@ typedef struct
 } TA2Mouse;
 
 TA2Mouse Mouse;
+semaphore_t VblSemaphore;
 
 static void clampXY()
 {
@@ -242,8 +244,7 @@ static void clampXY()
 
 static void __time_critical_func(mouseControllerVblIrq)(void)
 {
-    pio_interrupt_clear(pio0, 0);
-    Mouse.IntState |= STATUS_IRQ_VBL;
+    sem_release(&VblSemaphore);
 }
 
 static void mouseCommandSet()
@@ -611,6 +612,11 @@ void mouseControllerRun(void)
     mouseControllerRead(PortB);
     Mouse.LastPortB = PortB;
 
+    if (sem_try_acquire(&VblSemaphore))
+    {
+        Mouse.IntState |= STATUS_IRQ_VBL;
+    }
+
     // finally, do we need to trigger the AppleIIBus IRQ line?
     if (Mouse.IntState & (STATUS_IRQ_VBL|STATUS_IRQ_MOVEMENT|STATUS_IRQ_BUTTON))
     {
@@ -640,5 +646,6 @@ void __time_critical_func(mouseControllerReset)(void)
 void mouseControllerInit(void)
 {
     Mouse.InterVblCycles = US_60HZ_CYCLES + ADJUST_CYCLES;
+    sem_init(&VblSemaphore, 0, 1);
     mouseControllerReset();
 }
