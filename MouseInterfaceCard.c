@@ -641,11 +641,11 @@ void __time_critical_func(mouseControllerReset)(void)
     }
     Mouse.Clamp.MaxX = 1023;
     Mouse.Clamp.MaxY = 1023;
+    Mouse.InterVblCycles = US_60HZ_CYCLES + ADJUST_CYCLES;
 }
 
 void mouseControllerInit(void)
 {
-    Mouse.InterVblCycles = US_60HZ_CYCLES + ADJUST_CYCLES;
     sem_init(&VblSemaphore, 0, 1);
     mouseControllerReset();
 }
